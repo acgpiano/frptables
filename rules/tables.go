@@ -22,7 +22,7 @@
 
 package rules
 
-import "github.com/zngw/log"
+import "github.com/zngw/golib/log"
 
 func Check(text string) {
 	err, ip, name, port := parse(text)

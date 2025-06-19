@@ -23,13 +23,11 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"github.com/hpcloud/tail"
 	"github.com/zngw/frptables/config"
 	"github.com/zngw/frptables/rules"
-	"github.com/zngw/log"
-	"github.com/zngw/zipinfo/ipinfo"
+	"github.com/zngw/golib/log"
 	"os"
 	"path/filepath"
 	"time"
@@ -57,14 +55,17 @@ func main() {
 	_, file := filepath.Split(os.Args[0])
 	logFile, _ := filepath.Abs(config.Cfg.Logs)
 	logFile = filepath.Join(config.Cfg.Logs, file)
-	log.InitLog("all", logFile, "trace", 7, true, []string{"add", "link", "net", "sys"})
 
-	var ipCfg []interface{}
-	err = json.Unmarshal([]byte(config.Cfg.IpInfo), &ipCfg)
-	if err == nil {
-		ipinfo.Init(ipCfg)
+	opt := log.Option{
+		LogPath:         logFile,
+		LogLevel:        "trace",
+		Tags:            "add,link,net,sys",
+		MaxDays:         7,
+		DisableLogColor: true,
+		DisableCaller:   false,
+		CallerSkip:      0,
 	}
-
+	log.Init(opt)
 	// 初始化规则
 	rules.Init()
 

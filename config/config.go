@@ -50,7 +50,6 @@ type Conf struct {
 	AllowIp     []string       `yaml:"allow_ip,omitempty"`    // ip白名单
 	AllowPort   []int          `yaml:"allow_port,omitempty"`  // 端口白名单
 	Rules       []CfgRules     `yaml:"rules,omitempty"`       // 规则访问
-	IpInfo      string         `yaml:"ipinfo,omitempty"`      // 规则访问
 	RateMaxTime int64          `yaml:"-"`                     // IP频率中最高超时时间
 }
 

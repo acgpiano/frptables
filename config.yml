@@ -25,7 +25,7 @@ allow_port:
 rules:
 
   # 按数组顺序来，匹配到了就按匹配的规则执行，跳过此规则。
-  # 地区以 http://ip-api.com/json/?lang=zh-CN 查询的结果为准
+  # 地区以 https://ip.zengwu.com.cn/?ip= 查询的结果为准
   # 端口: -1 所有端口
   # time: 时间区间
   # count: 访问次数，-1不限，0限制。其他为 time时间内访问count次，超出频率就限制

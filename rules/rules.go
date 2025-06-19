@@ -23,11 +23,13 @@
 package rules
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/zngw/frptables/config"
 	"github.com/zngw/frptables/util"
-	"github.com/zngw/log"
-	"github.com/zngw/zipinfo/ipinfo"
+	"github.com/zngw/golib/log"
+	"io"
+	"net/http"
 )
 
 // 拦截IP-端口，因为验证ip有时间差，攻击频率太高会导致防火墙重复添加。
@@ -46,7 +48,7 @@ func rules(ip, name string, port int) {
 		return
 	}
 
-	result, desc, p, count := checkRules(ip, port)
+	result, desc, p, count := CheckRules(ip, port)
 	if result {
 		refuse(ip, name, p)
 		log.Trace("add", fmt.Sprintf("refuse: [%s]%s:%d ->%d, %s", name, ip, port, count, desc))
@@ -77,22 +79,55 @@ func checkAllow(ip string, port int) bool {
 // 检测访问规则
 // ip-访问者IP， port-转发端口
 // 返回： refuse-是否加入规则拒绝访问, desc-描述， p-拒绝访问端口, count-规则间隔内访问次数
-func checkRules(ip string, port int) (refuse bool, desc string, p, count int) {
+func CheckRules(ip string, port int) (refuse bool, desc string, p, count int) {
 	info := getIpHistory(ip)
 	if !info.HasInfo {
-		err, ipInfo := ipinfo.GetIpInfo(ip)
+		// 通过 https://ip.zengwu.com.cn?ip= 接口获取ip归属地信息
+		// 详细文档可查看： https://zengwu.com.cn/archives/ip
+		// 这里也可以切换成自己的ip查询
+		client := &http.Client{}
+		req, _ := http.NewRequest("GET", "https://ip.zengwu.com.cn?ip="+ip, nil)
+		resp, err := client.Do(req)
+		if err != nil {
+			// 读取网页数据错误
+			return
+		}
+
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil || resp.StatusCode != 200 {
+			// 读取网页数据错误
+			return
+		}
+
+		var jsonInfo struct {
+			Result   int32  `json:"result,omitempty"`   // 状态
+			Country  string `json:"country,omitempty"`  // 国家
+			Province string `json:"province,omitempty"` // 省
+			City     string `json:"city,omitempty"`     // 城市
+			Isp      string `json:"isp,omitempty"`      // 运营商
+			Query    string `json:"query,omitempty"`    // 查询IP
+			Time     int64  `json:"time,omitempty"`     // 查询时间
+		}
+
+		err = json.Unmarshal(body, &jsonInfo)
+		if err != nil {
+			return
+		}
+
 		info.HasInfo = true
 
-		if err != nil || ipInfo.Status != "success" {
+		if err != nil || jsonInfo.Result != 0 {
 			// 地址获取不成功，跳过
 			refuse = false
 			p = -1
 			return
 		}
 
-		info.Country = ipInfo.Country
-		info.Region = ipInfo.Region
-		info.City = ipInfo.City
+		info.Country = jsonInfo.Country
+		info.Region = jsonInfo.Province
+		info.City = jsonInfo.City
+		// 获取IP信息结束
 	}
 	info.Add()
 
