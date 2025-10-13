@@ -25,11 +25,12 @@ package rules
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+
 	"github.com/zngw/frptables/config"
 	"github.com/zngw/frptables/util"
 	"github.com/zngw/golib/log"
-	"io"
-	"net/http"
 )
 
 // 拦截IP-端口，因为验证ip有时间差，攻击频率太高会导致防火墙重复添加。
@@ -201,21 +202,37 @@ func refuse(ip, name string, port int) {
 		RefuseMap[ip] = true
 	}
 
-	cmd := ""
+	var cmd string
 	switch config.Cfg.TablesType {
 	case "iptables":
+		// 添加拒绝规则
 		if port == -1 {
 			cmd = fmt.Sprintf("iptables -I INPUT -s %s -j DROP", ip)
 		} else {
-			cmd = fmt.Sprintf("iptables -I INPUT -s %s -ptcp --dport %d -j DROP", ip, port)
+			cmd = fmt.Sprintf("iptables -I INPUT -s %s -p tcp --dport %d -j DROP", ip, port)
 		}
+
+		// 先执行 iptables 命令
+		result := util.Command(cmd)
+		if result != "" {
+			log.Trace("sys", result)
+		}
+
+		// 再断开现有连接
+		if port == -1 {
+			cmd = fmt.Sprintf("ss -K dst %s", ip)
+		} else {
+			cmd = fmt.Sprintf("ss -K dst %s dport = %d", ip, port)
+		}
+
 	case "firewall":
 		if port == -1 {
-			cmd = fmt.Sprintf("firewall-cmd --permanent --add-rich-rule=\"rule family=\"ipv4\" source address=\"%s\" reject\"", ip)
+			cmd = fmt.Sprintf(`firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='%s' reject"`, ip)
 		} else {
-			cmd = fmt.Sprintf("firewall-cmd --permanent --add-rich-rule=\"rule family=\"ipv4\" source address=\"%s\" port protocol=\"tcp\" port=\"%d\" reject\"", ip, port)
+			cmd = fmt.Sprintf(`firewall-cmd --permanent --add-rich-rule="rule family='ipv4' source address='%s' port protocol='tcp' port='%d' reject"`, ip, port)
 		}
-		cmd += "&& firewall-cmd --reload"
+		cmd += " && firewall-cmd --reload"
+
 	case "md":
 		if port == -1 {
 			cmd = fmt.Sprintf("netsh advfirewall firewall add rule name=%s-%s dir=in action=block protocol=TCP remoteip=%s", name, ip, ip)
@@ -224,8 +241,11 @@ func refuse(ip, name string, port int) {
 		}
 	}
 
-	result := util.Command(cmd)
-	if result != "" {
-		log.Trace("sys", result)
+	// 执行剩余命令（iptables 的第二条是 ss -K，其他类型直接执行）
+	if cmd != "" {
+		result := util.Command(cmd)
+		if result != "" {
+			log.Trace("sys", result)
+		}
 	}
 }
